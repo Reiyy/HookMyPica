@@ -135,7 +135,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 });
         // Hook Picasso 加载动态启动图
         XposedHelpers.findAndHookMethod(
-            "com.squareup.picasso.RequestCreator",
+            "com.squareup.picasso.Picasso",
             lpparam.classLoader,
             "load",
             int.class,
@@ -148,12 +148,10 @@ public class MainHook implements IXposedHookLoadPackage {
                     int splashBlurId = getDrawableId(lpparam.classLoader, "splash_bg_1_blur");
 
                     if (resId == splashId || resId == splashBlurId) {
-                        fetchAndUpdateImages();  // 获取并缓存 API 图片（异步）
-
                         File imageFile = new File(resId == splashId ? imagePath : blurImagePath);
                         if (imageFile.exists()) {
-                            param.args[0] = 0; // 取消原始加载
-                            Object picassoInstance = XposedHelpers.getObjectField(param.thisObject, "picasso");
+                            param.args[0] = 0;  // 取消原始加载
+                            Object picassoInstance = param.thisObject;
                             XposedHelpers.callMethod(picassoInstance, "load", "file://" + imageFile.getAbsolutePath());
                             param.setResult(null);
                         }
