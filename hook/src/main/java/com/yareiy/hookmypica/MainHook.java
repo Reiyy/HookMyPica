@@ -51,21 +51,36 @@ public class MainHook implements IXposedHookLoadPackage {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     int resId = (int) param.args[0];
-                    int splashId = getDrawableId(lpparam.classLoader, "splash_bg_1");
-                    int splashBlurId = getDrawableId(lpparam.classLoader, "splash_bg_1_blur");
-
-                    XposedBridge.log("Picasso.load(int) called with resId: " + resId);
-                    XposedBridge.log("splash_bg_1 id: " + splashId + ", splash_bg_1_blur id: " + splashBlurId);
-
-                    if (resId == splashId || resId == splashBlurId) {
-                        File imageFile = new File(resId == splashId ? imagePath : blurImagePath);
+                    Object picassoInstance = param.thisObject;
+                    Context context = null;
+                    try {
+                        // 尝试从 Picasso 实例中获取 Context（Picasso 内部通常会持有）
+                        context = (Context) XposedHelpers.getObjectField(picassoInstance, "context");
+                    } catch (Throwable t) {
+                        XposedBridge.log("Failed to get context from Picasso instance: " + t.getMessage());
+                    }
+                    if (context == null) {
+                        // 如果无法获取，使用当前应用
+                        context = android.app.AndroidAppHelper.currentApplication();
+                    }
+                    
+                    String resName = "";
+                    try {
+                        resName = context.getResources().getResourceEntryName(resId);
+                    } catch (Throwable t) {
+                        XposedBridge.log("Failed to get resource entry name for resId " + resId + ": " + t.getMessage());
+                    }
+                    XposedBridge.log("Picasso.load(int) called with resId: " + resId + ", resource name: " + resName);
+                    
+                    // 如果资源名称为 "splash_bg_1" 或 "splash_bg_1_blur"，则尝试替换
+                    if ("splash_bg_1".equals(resName) || "splash_bg_1_blur".equals(resName)) {
+                        File imageFile = new File("splash_bg_1".equals(resName) ? imagePath : blurImagePath);
                         XposedBridge.log("Matching resource found. File path: " + imageFile.getAbsolutePath() +
                                            ", exists: " + imageFile.exists());
                         if (imageFile.exists()) {
-                            Object picassoInstance = param.thisObject;
                             String fileUrl = "file://" + imageFile.getAbsolutePath();
                             XposedBridge.log("Replacing image with fileUrl: " + fileUrl);
-                            // 调用 load(String) 方法，返回新的 RequestCreator 对象
+                            // 调用 load(String) 并返回新的 RequestCreator 对象
                             Object newRequestCreator = XposedHelpers.callMethod(picassoInstance, "load", fileUrl);
                             param.setResult(newRequestCreator);
                         } else {
@@ -235,19 +250,6 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log("File downloaded: " + outputPath);
         } catch (Exception e) {
             XposedBridge.log("Error downloading image: " + e.getMessage());
-        }
-    }
-
-    // 获取 R.drawable 资源 ID
-    private int getDrawableId(ClassLoader classLoader, String name) {
-        try {
-            Class<?> rDrawable = classLoader.loadClass("com.picacomic.fregata.R$drawable");
-            int id = (int) XposedHelpers.getStaticObjectField(rDrawable, name);
-            XposedBridge.log("Found drawable id for " + name + ": " + id);
-            return id;
-        } catch (Exception e) {
-            XposedBridge.log("Error getting drawable id for " + name + ": " + e.getMessage());
-            return 0;
         }
     }
 }
