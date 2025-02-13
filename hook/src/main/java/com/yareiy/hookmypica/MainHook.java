@@ -7,8 +7,6 @@ import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ImageView;
-
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -137,37 +135,31 @@ public class MainHook implements IXposedHookLoadPackage {
                 });
         // Hook Picasso 加载动态启动图
         XposedHelpers.findAndHookMethod(
-                "com.squareup.picasso.RequestCreator",
-                lpparam.classLoader,
-                "into",
-                ImageView.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        ImageView imageView = (ImageView) param.args[0];
+            "com.squareup.picasso.RequestCreator",
+            lpparam.classLoader,
+            "load",
+            int.class,
+            new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    int resId = (int) param.args[0];
 
-                        Object requestCreator = param.thisObject;
-                        Object picassoInstance = XposedHelpers.getObjectField(requestCreator, "picasso");
-                        Integer resId = (Integer) XposedHelpers.getObjectField(requestCreator, "resourceId");
+                    int splashId = getDrawableId(lpparam.classLoader, "splash_bg_1");
+                    int splashBlurId = getDrawableId(lpparam.classLoader, "splash_bg_1_blur");
 
-                        if (resId == null) return;
+                    if (resId == splashId || resId == splashBlurId) {
+                        fetchAndUpdateImages();  // 获取并缓存 API 图片（异步）
 
-                        int splashId = getDrawableId(lpparam.classLoader, "splash_bg_1");
-                        int splashBlurId = getDrawableId(lpparam.classLoader, "splash_bg_1_blur");
-
-                        if (resId == splashId || resId == splashBlurId) {
-                            fetchAndUpdateImages();  // 异步获取启动图
-
-                            if (new File(imagePath).exists() && resId == splashId) {
-                                XposedHelpers.callMethod(picassoInstance, "load", "file://" + imagePath);
-                                param.setResult(null);
-                            } else if (new File(blurImagePath).exists() && resId == splashBlurId) {
-                                XposedHelpers.callMethod(picassoInstance, "load", "file://" + blurImagePath);
-                                param.setResult(null);
-                            }
+                        File imageFile = new File(resId == splashId ? imagePath : blurImagePath);
+                        if (imageFile.exists()) {
+                            param.args[0] = 0; // 取消原始加载
+                            Object picassoInstance = XposedHelpers.getObjectField(param.thisObject, "picasso");
+                            XposedHelpers.callMethod(picassoInstance, "load", "file://" + imageFile.getAbsolutePath());
+                            param.setResult(null);
                         }
                     }
                 }
+            }
         );
     }
     // == 通过 API 获取最新的启动图 URL，并缓存 ==
