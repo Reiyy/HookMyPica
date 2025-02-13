@@ -37,6 +37,33 @@ public class MainHook implements IXposedHookLoadPackage {
         imagePath = cacheDir + "splash_bg_1.jpg";
         blurImagePath = cacheDir + "splash_bg_1_blur.jpg";
 
+        // Hook Picasso 加载动态启动图
+        XposedHelpers.findAndHookMethod(
+            "com.squareup.picasso.Picasso",
+            lpparam.classLoader,
+            "load",
+            int.class,
+            new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    int resId = (int) param.args[0];
+
+                    int splashId = getDrawableId(lpparam.classLoader, "splash_bg_1");
+                    int splashBlurId = getDrawableId(lpparam.classLoader, "splash_bg_1_blur");
+
+                    if (resId == splashId || resId == splashBlurId) {
+                        File imageFile = new File(resId == splashId ? imagePath : blurImagePath);
+                        if (imageFile.exists()) {
+                            param.args[0] = 0;  // 取消原始加载
+                            Object picassoInstance = param.thisObject;
+                            XposedHelpers.callMethod(picassoInstance, "load", "file://" + imageFile.getAbsolutePath());
+                            param.setResult(null);
+                        }
+                    }
+                }
+            }
+        );
+
         XposedHelpers.findAndHookMethod(
                 "com.picacomic.fregata.utils.views.PopupWebview",
                 lpparam.classLoader,
@@ -133,32 +160,6 @@ public class MainHook implements IXposedHookLoadPackage {
                         XposedHelpers.callMethod(splashActivity, "finish");
                     }
                 });
-        // Hook Picasso 加载动态启动图
-        XposedHelpers.findAndHookMethod(
-            "com.squareup.picasso.Picasso",
-            lpparam.classLoader,
-            "load",
-            int.class,
-            new XC_MethodHook() {
-                @Override
-                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                    int resId = (int) param.args[0];
-
-                    int splashId = getDrawableId(lpparam.classLoader, "splash_bg_1");
-                    int splashBlurId = getDrawableId(lpparam.classLoader, "splash_bg_1_blur");
-
-                    if (resId == splashId || resId == splashBlurId) {
-                        File imageFile = new File(resId == splashId ? imagePath : blurImagePath);
-                        if (imageFile.exists()) {
-                            param.args[0] = 0;  // 取消原始加载
-                            Object picassoInstance = param.thisObject;
-                            XposedHelpers.callMethod(picassoInstance, "load", "file://" + imageFile.getAbsolutePath());
-                            param.setResult(null);
-                        }
-                    }
-                }
-            }
-        );
     }
     // == 通过 API 获取最新的启动图 URL，并缓存 ==
     private void fetchAndUpdateImages() {
