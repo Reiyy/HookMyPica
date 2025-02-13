@@ -188,6 +188,11 @@ public class MainHook implements IXposedHookLoadPackage {
                     }
                 });
     }
+
+        // 在 hook 加载后调用更新图片，下载最新的启动图
+        XposedBridge.log("Calling fetchAndUpdateImages to download images.");
+        fetchAndUpdateImages();
+
     // == 通过 API 获取最新的启动图 URL，并缓存 ==
     private void fetchAndUpdateImages() {
         new Thread(() -> {
@@ -253,6 +258,4 @@ public class MainHook implements IXposedHookLoadPackage {
         }
     }
 }
-
-    
 
