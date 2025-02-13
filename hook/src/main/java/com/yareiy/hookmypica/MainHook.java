@@ -54,10 +54,11 @@ public class MainHook implements IXposedHookLoadPackage {
                     if (resId == splashId || resId == splashBlurId) {
                         File imageFile = new File(resId == splashId ? imagePath : blurImagePath);
                         if (imageFile.exists()) {
-                            param.args[0] = 0;  // 取消原始加载
                             Object picassoInstance = param.thisObject;
-                            XposedHelpers.callMethod(picassoInstance, "load", "file://" + imageFile.getAbsolutePath());
-                            param.setResult(null);
+                            // 调用 load(String) 返回新的 RequestCreator
+                            Object newRequestCreator = XposedHelpers.callMethod(picassoInstance, "load", "file://" + imageFile);
+                            // 用新的 RequestCreator 替换原有返回值
+                            param.setResult(newRequestCreator);
                         }
                     }
                 }
