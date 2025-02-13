@@ -34,8 +34,12 @@ public class MainHook implements IXposedHookLoadPackage {
         XposedBridge.log("handleLoadPackage: " + lpparam.processName + ", " + lpparam.processName);
 
         cacheDir = "/sdcard/Android/data/com.yareiy.mypica/cache/LaunchImage";
-        imagePath = cacheDir + "splash_bg_1.jpg";
-        blurImagePath = cacheDir + "splash_bg_1_blur.jpg";
+        imagePath = cacheDir + "/splash_bg_1.jpg";
+        blurImagePath = cacheDir + "/splash_bg_1_blur.jpg";
+
+        XposedBridge.log("Cache dir: " + cacheDir);
+        XposedBridge.log("Image path: " + imagePath);
+        XposedBridge.log("Blur image path: " + blurImagePath);
 
         // Hook Picasso 加载动态启动图
         XposedHelpers.findAndHookMethod(
@@ -47,18 +51,25 @@ public class MainHook implements IXposedHookLoadPackage {
                 @Override
                 protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                     int resId = (int) param.args[0];
-
                     int splashId = getDrawableId(lpparam.classLoader, "splash_bg_1");
                     int splashBlurId = getDrawableId(lpparam.classLoader, "splash_bg_1_blur");
 
+                    XposedBridge.log("Picasso.load(int) called with resId: " + resId);
+                    XposedBridge.log("splash_bg_1 id: " + splashId + ", splash_bg_1_blur id: " + splashBlurId);
+
                     if (resId == splashId || resId == splashBlurId) {
                         File imageFile = new File(resId == splashId ? imagePath : blurImagePath);
+                        XposedBridge.log("Matching resource found. File path: " + imageFile.getAbsolutePath() +
+                                           ", exists: " + imageFile.exists());
                         if (imageFile.exists()) {
                             Object picassoInstance = param.thisObject;
-                            // 调用 load(String) 返回新的 RequestCreator
-                            Object newRequestCreator = XposedHelpers.callMethod(picassoInstance, "load", "file://" + imageFile);
-                            // 用新的 RequestCreator 替换原有返回值
+                            String fileUrl = "file://" + imageFile.getAbsolutePath();
+                            XposedBridge.log("Replacing image with fileUrl: " + fileUrl);
+                            // 调用 load(String) 方法，返回新的 RequestCreator 对象
+                            Object newRequestCreator = XposedHelpers.callMethod(picassoInstance, "load", fileUrl);
                             param.setResult(newRequestCreator);
+                        } else {
+                            XposedBridge.log("Image file does not exist. Using original resource.");
                         }
                     }
                 }
@@ -181,14 +192,12 @@ public class MainHook implements IXposedHookLoadPackage {
                 }
                 is.close();
 
-                // 解析 JSON
                 JSONObject json = new JSONObject(response.toString());
                 String newImageName = json.getString("image_name");
                 String newBlurImageName = json.getString("blur_image_name");
                 String newImageUrl = json.getString("image_url");
                 String newBlurImageUrl = json.getString("blur_image_url");
 
-                // 如果文件名不同，则下载新的图片
                 if (!newImageName.equals(cachedImageName)) {
                     downloadFile(newImageUrl, imagePath);
                     cachedImageName = newImageName;
@@ -223,6 +232,7 @@ public class MainHook implements IXposedHookLoadPackage {
             }
             fos.close();
             is.close();
+            XposedBridge.log("File downloaded: " + outputPath);
         } catch (Exception e) {
             XposedBridge.log("Error downloading image: " + e.getMessage());
         }
@@ -232,11 +242,15 @@ public class MainHook implements IXposedHookLoadPackage {
     private int getDrawableId(ClassLoader classLoader, String name) {
         try {
             Class<?> rDrawable = classLoader.loadClass("com.picacomic.fregata.R$drawable");
-            return (int) XposedHelpers.getStaticObjectField(rDrawable, name);
+            int id = (int) XposedHelpers.getStaticObjectField(rDrawable, name);
+            XposedBridge.log("Found drawable id for " + name + ": " + id);
+            return id;
         } catch (Exception e) {
+            XposedBridge.log("Error getting drawable id for " + name + ": " + e.getMessage());
             return 0;
         }
     }
+}
 
-    }
+    
 
