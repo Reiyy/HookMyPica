@@ -33,13 +33,23 @@ public class MainHook implements IXposedHookLoadPackage {
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
         XposedBridge.log("handleLoadPackage: " + lpparam.processName + ", " + lpparam.processName);
 
+        // 动态启动图缓存路径
         cacheDir = "/sdcard/Android/data/com.yareiy.mypica/cache/LaunchImage";
         imagePath = cacheDir + "/splash_bg_1.jpg";
         blurImagePath = cacheDir + "/splash_bg_1_blur.jpg";
 
-        XposedBridge.log("Cache dir: " + cacheDir);
-        XposedBridge.log("Image path: " + imagePath);
-        XposedBridge.log("Blur image path: " + blurImagePath);
+        // 创建动态启动图路径
+        File cacheDirectory = new File(cacheDir);
+        if (!cacheDirectory.exists()) {
+            boolean created = cacheDirectory.mkdirs();
+            if (!created) {
+                XposedBridge.log("Failed to create cache directory: " + cacheDir);
+            }
+        }
+
+        // XposedBridge.log("Cache dir: " + cacheDir);
+        // XposedBridge.log("Image path: " + imagePath);
+        // XposedBridge.log("Blur image path: " + blurImagePath);
 
         // Hook Picasso 加载动态启动图
         XposedHelpers.findAndHookMethod(
@@ -70,16 +80,16 @@ public class MainHook implements IXposedHookLoadPackage {
                     } catch (Throwable t) {
                         XposedBridge.log("Failed to get resource entry name for resId " + resId + ": " + t.getMessage());
                     }
-                    XposedBridge.log("Picasso.load(int) called with resId: " + resId + ", resource name: " + resName);
+                    // XposedBridge.log("Picasso.load(int) called with resId: " + resId + ", resource name: " + resName);
                     
                     // 如果资源名称为 "splash_bg_1" 或 "splash_bg_1_blur"，则尝试替换
                     if ("splash_bg_1".equals(resName) || "splash_bg_1_blur".equals(resName)) {
                         File imageFile = new File("splash_bg_1".equals(resName) ? imagePath : blurImagePath);
-                        XposedBridge.log("Matching resource found. File path: " + imageFile.getAbsolutePath() +
-                                           ", exists: " + imageFile.exists());
+                        // XposedBridge.log("Matching resource found. File path: " + imageFile.getAbsolutePath() +
+                        //                    ", exists: " + imageFile.exists());
                         if (imageFile.exists()) {
                             String fileUrl = "file://" + imageFile.getAbsolutePath();
-                            XposedBridge.log("Replacing image with fileUrl: " + fileUrl);
+                            // XposedBridge.log("Replacing image with fileUrl: " + fileUrl);
                             // 调用 load(String) 并返回新的 RequestCreator 对象
                             Object newRequestCreator = XposedHelpers.callMethod(picassoInstance, "load", fileUrl);
                             param.setResult(newRequestCreator);
@@ -188,12 +198,12 @@ public class MainHook implements IXposedHookLoadPackage {
                     }
                 });
     
-        // 在 hook 加载后调用更新图片，下载最新的启动图
+        // 在hook加载后调用API，获取最新的启动图
         XposedBridge.log("Calling fetchAndUpdateImages to download images.");
         fetchAndUpdateImages();
     }
 
-    // == 通过 API 获取最新的启动图 URL，并缓存 ==
+    // 通过API获取最新的启动图URL，并缓存到本地
     private void fetchAndUpdateImages() {
         new Thread(() -> {
             try {
@@ -234,7 +244,7 @@ public class MainHook implements IXposedHookLoadPackage {
         }).start();
     }
 
-    // == 下载文件到本地 ==
+    // 下载启动图到本地
     private void downloadFile(String urlStr, String outputPath) {
         try {
             URL url = new URL(urlStr);
