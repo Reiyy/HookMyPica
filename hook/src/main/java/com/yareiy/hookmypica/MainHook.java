@@ -10,12 +10,15 @@ import android.view.ViewGroup;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.net.URLEncoder;
 import java.io.FileNotFoundException;
 import java.net.SocketTimeoutException;
-import java.net.URLEncoder;
+import java.net.MalformedURLException;
+import java.io.IOException;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
@@ -23,6 +26,9 @@ import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
 import org.json.JSONObject;
+import org.json.JSONException;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserFactory;
 
 @SuppressWarnings("RedundantThrows")
 public class MainHook implements IXposedHookLoadPackage {
@@ -272,7 +278,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 // 构建动态URL
                 String apiUrl = "https://picaapi.reiyy.com:2333/GetLaunchImage";
                 if (!username.isEmpty()) {
-                    apiUrl += "?user=" + URLEncoder.encode(username, StandardCharsets.UTF_8.name());
+                    apiUrl += "?user=" + URLEncoder.encode(username, "UTF-8");
                     XposedBridge.log("[DEBUG] Requesting with user: " + username);
                 } else {
                     XposedBridge.log("[INFO] Making anonymous image request");
