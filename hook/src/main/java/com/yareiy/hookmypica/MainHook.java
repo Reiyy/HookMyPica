@@ -13,6 +13,9 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.io.FileNotFoundException;
+import java.net.SocketTimeoutException;
+import java.net.URLEncoder;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
