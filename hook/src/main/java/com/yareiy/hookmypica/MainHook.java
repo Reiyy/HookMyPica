@@ -206,8 +206,78 @@ public class MainHook implements IXposedHookLoadPackage {
     // 通过API获取最新的启动图URL，并缓存到本地
     private void fetchAndUpdateImages() {
         new Thread(() -> {
+            String username = "";
+            FileInputStream fis = null;
+            
+            // 读取用户配置
             try {
-                URL url = new URL("https://picaapi.reiyy.com:2333/GetLaunchImage");
+                File prefsFile = new File("/data/user/0/com.yareiy.mypica/shared_prefs/PICACOMIC_FREGATA.xml");
+                if (prefsFile.exists()) {
+                    try {
+                        // XML解析初始化
+                        XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
+                        factory.setNamespaceAware(true);
+                        XmlPullParser parser = factory.newPullParser();
+                        
+                        // 文件流处理
+                        fis = new FileInputStream(prefsFile);
+                        parser.setInput(fis, "UTF-8");
+
+                        // XML解析
+                        int eventType = parser.getEventType();
+                        while (eventType != XmlPullParser.END_DOCUMENT) {
+                            if (eventType == XmlPullParser.START_TAG) {
+                                String tagName = parser.getName();
+                                if ("string".equals(tagName)) {
+                                    String nameAttr = parser.getAttributeValue(null, "name");
+                                    if ("KEY_USER_LOGIN_EMAIL".equals(nameAttr)) {
+                                        eventType = parser.next();
+                                        if (eventType == XmlPullParser.TEXT) {
+                                            username = parser.getText().trim();
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            eventType = parser.next();
+                        }
+                    } catch (FileNotFoundException e) {
+                        XposedBridge.log("[ERR] Prefs file not found: " + e.getMessage());
+                    } catch (SecurityException e) {
+                        XposedBridge.log("[ERR] File access denied: " + e.getMessage());
+                    } catch (Exception e) {
+                        XposedBridge.log("[ERR] XML parsing failed: " + e.getMessage());
+                    } finally {
+                        // 关闭文件流
+                        if (fis != null) {
+                            try {
+                                fis.close();
+                            } catch (IOException e) {
+                                XposedBridge.log("[WARN] Stream closing failed: " + e.getMessage());
+                            }
+                        }
+                    }
+                } else {
+                    XposedBridge.log("[INFO] Prefs file does not exist, using anonymous mode");
+                }
+            } catch (SecurityException e) {
+                XposedBridge.log("[ERR] File path access denied: " + e.getMessage());
+            }
+
+            // 构建API请求
+            try {
+                // 构建动态URL
+                String apiUrl = "https://picaapi.reiyy.com:2333/GetLaunchImage";
+                if (!username.isEmpty()) {
+                    apiUrl += "?user=" + URLEncoder.encode(username, StandardCharsets.UTF_8.name());
+                    XposedBridge.log("[DEBUG] Requesting with user: " + username);
+                } else {
+                    XposedBridge.log("[INFO] Making anonymous image request");
+                }
+
+                // 网络请求
+                URL url = new URL(apiUrl);
+                //URL url = new URL("https://picaapi.reiyy.com:2333/GetLaunchImage");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
                 conn.setConnectTimeout(3000);
