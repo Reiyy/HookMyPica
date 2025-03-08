@@ -206,7 +206,35 @@ public class MainHook implements IXposedHookLoadPackage {
                         XposedHelpers.callMethod(splashActivity, "finish");
                     }
                 });
-    
+        // 隐藏更新弹窗的按钮1
+        XposedHelpers.findAndHookMethod(
+            "com.picacomic.fregata.utils.views.AlertDialogCenter",
+            lpparam.classLoader,
+            "showUpdateApkAlertDialog",
+            android.content.Context.class,
+            "com.picacomic.fregata.models.LatestApplicationObject",
+            boolean.class,
+            new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    Dialog dialog = (Dialog) param.getResult();
+                    if (dialog != null) {
+                        Button button = dialog.findViewById(
+                            dialog.getContext().getResources().getIdentifier(
+                                "button_dialog_update_apk_positive",
+                                "id",
+                                lpparam.packageName
+                            )
+                        );
+                        if (button != null) {
+                            button.setVisibility(View.GONE); // 隐藏按钮
+                        }
+                    }
+                }
+            }
+        );
+    }
+
         // 在hook加载后调用API，获取最新的启动图
         XposedBridge.log("Calling fetchAndUpdateImages to download images.");
         fetchAndUpdateImages();
