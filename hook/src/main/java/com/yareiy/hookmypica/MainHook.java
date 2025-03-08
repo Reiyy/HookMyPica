@@ -233,7 +233,6 @@ public class MainHook implements IXposedHookLoadPackage {
                 }
             }
         );
-    }
 
         // 在hook加载后调用API，获取最新的启动图
         XposedBridge.log("Calling fetchAndUpdateImages to download images.");
