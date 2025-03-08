@@ -7,18 +7,112 @@ import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.app.Dialog;
+import android.widget.Button;
+
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.io.FileNotFoundException;
+import java.net.SocketTimeoutException;
+import java.net.MalformedURLException;
+import java.io.IOException;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import org.json.JSONObject;
+import org.json.JSONException;
+import org.xmlpull.v1.XmlPullParser;
+import org.xmlpull.v1.XmlPullParserFactory;
 
 @SuppressWarnings("RedundantThrows")
 public class MainHook implements IXposedHookLoadPackage {
+    private String cacheDir;
+    private String imagePath;
+    private String blurImagePath;
+    private String cachedImageName;
+    private String cachedBlurImageName;
+
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
         XposedBridge.log("handleLoadPackage: " + lpparam.processName + ", " + lpparam.processName);
+
+        // 动态启动图缓存路径
+        cacheDir = "/sdcard/Android/data/com.yareiy.mypica/cache/LaunchImage";
+        imagePath = cacheDir + "/splash_bg_1.jpg";
+        blurImagePath = cacheDir + "/splash_bg_1_blur.jpg";
+
+        // 创建动态启动图路径
+        File cacheDirectory = new File(cacheDir);
+        if (!cacheDirectory.exists()) {
+            boolean created = cacheDirectory.mkdirs();
+            if (!created) {
+                XposedBridge.log("Failed to create cache directory: " + cacheDir);
+            }
+        }
+
+        // XposedBridge.log("Cache dir: " + cacheDir);
+        // XposedBridge.log("Image path: " + imagePath);
+        // XposedBridge.log("Blur image path: " + blurImagePath);
+
+        // Hook Picasso 加载动态启动图
+        XposedHelpers.findAndHookMethod(
+            "com.squareup.picasso.Picasso",
+            lpparam.classLoader,
+            "load",
+            int.class,
+            new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    int resId = (int) param.args[0];
+                    Object picassoInstance = param.thisObject;
+                    Context context = null;
+                    try {
+                        // 尝试从 Picasso 实例中获取 Context（Picasso 内部通常会持有）
+                        context = (Context) XposedHelpers.getObjectField(picassoInstance, "context");
+                    } catch (Throwable t) {
+                        XposedBridge.log("Failed to get context from Picasso instance: " + t.getMessage());
+                    }
+                    if (context == null) {
+                        // 如果无法获取，使用当前应用
+                        context = android.app.AndroidAppHelper.currentApplication();
+                    }
+                    
+                    String resName = "";
+                    try {
+                        resName = context.getResources().getResourceEntryName(resId);
+                    } catch (Throwable t) {
+                        XposedBridge.log("Failed to get resource entry name for resId " + resId + ": " + t.getMessage());
+                    }
+                    // XposedBridge.log("Picasso.load(int) called with resId: " + resId + ", resource name: " + resName);
+                    
+                    // 如果资源名称为 "splash_bg_1" 或 "splash_bg_1_blur"，则尝试替换
+                    if ("splash_bg_1".equals(resName) || "splash_bg_1_blur".equals(resName)) {
+                        File imageFile = new File("splash_bg_1".equals(resName) ? imagePath : blurImagePath);
+                        // XposedBridge.log("Matching resource found. File path: " + imageFile.getAbsolutePath() +
+                        //                    ", exists: " + imageFile.exists());
+                        if (imageFile.exists()) {
+                            String fileUrl = "file://" + imageFile.getAbsolutePath();
+                            // XposedBridge.log("Replacing image with fileUrl: " + fileUrl);
+                            // 调用 load(String) 并返回新的 RequestCreator 对象
+                            Object newRequestCreator = XposedHelpers.callMethod(picassoInstance, "load", fileUrl);
+                            param.setResult(newRequestCreator);
+                        } else {
+                            XposedBridge.log("Image file does not exist. Using original resource.");
+                        }
+                    }
+                }
+            }
+        );
+
         XposedHelpers.findAndHookMethod(
                 "com.picacomic.fregata.utils.views.PopupWebview",
                 lpparam.classLoader,
@@ -115,5 +209,175 @@ public class MainHook implements IXposedHookLoadPackage {
                         XposedHelpers.callMethod(splashActivity, "finish");
                     }
                 });
+        // 隐藏更新弹窗的按钮1
+        XposedHelpers.findAndHookMethod(
+            "com.picacomic.fregata.utils.views.AlertDialogCenter",
+            lpparam.classLoader,
+            "showUpdateApkAlertDialog",
+            android.content.Context.class,
+            "com.picacomic.fregata.models.LatestApplicationObject",
+            boolean.class,
+            new XC_MethodHook() {
+                @Override
+                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                    Dialog dialog = (Dialog) param.getResult();
+                    if (dialog != null) {
+                        Button button = dialog.findViewById(
+                            dialog.getContext().getResources().getIdentifier(
+                                "button_dialog_update_apk_positive",
+                                "id",
+                                lpparam.packageName
+                            )
+                        );
+                        if (button != null) {
+                            button.setVisibility(View.GONE); // 隐藏按钮
+                        }
+                    }
+                }
+            }
+        );
+
+        // 在hook加载后调用API，获取最新的启动图
+        XposedBridge.log("Calling fetchAndUpdateImages to download images.");
+        fetchAndUpdateImages();
+    }
+
+    // 通过API获取最新的启动图URL，并缓存到本地
+    private void fetchAndUpdateImages() {
+        new Thread(() -> {
+            String username = "";
+            FileInputStream fis = null;
+            
+            // 读取用户配置
+            try {
+                File prefsFile = new File("/data/user/0/com.yareiy.mypica/shared_prefs/PICACOMIC_FREGATA.xml");
+                if (prefsFile.exists()) {
+                    try {
+                        // XML解析初始化
+                        XmlPullParserFactory factory = XmlPullParserFactory.newInstance();
+                        factory.setNamespaceAware(true);
+                        XmlPullParser parser = factory.newPullParser();
+                        
+                        // 文件流处理
+                        fis = new FileInputStream(prefsFile);
+                        parser.setInput(fis, "UTF-8");
+
+                        // XML解析
+                        int eventType = parser.getEventType();
+                        while (eventType != XmlPullParser.END_DOCUMENT) {
+                            if (eventType == XmlPullParser.START_TAG) {
+                                String tagName = parser.getName();
+                                if ("string".equals(tagName)) {
+                                    String nameAttr = parser.getAttributeValue(null, "name");
+                                    if ("KEY_USER_LOGIN_EMAIL".equals(nameAttr)) {
+                                        eventType = parser.next();
+                                        if (eventType == XmlPullParser.TEXT) {
+                                            username = parser.getText().trim();
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            eventType = parser.next();
+                        }
+                    } catch (FileNotFoundException e) {
+                        XposedBridge.log("[ERR] Prefs file not found: " + e.getMessage());
+                    } catch (SecurityException e) {
+                        XposedBridge.log("[ERR] File access denied: " + e.getMessage());
+                    } catch (Exception e) {
+                        XposedBridge.log("[ERR] XML parsing failed: " + e.getMessage());
+                    } finally {
+                        // 关闭文件流
+                        if (fis != null) {
+                            try {
+                                fis.close();
+                            } catch (IOException e) {
+                                XposedBridge.log("[WARN] Stream closing failed: " + e.getMessage());
+                            }
+                        }
+                    }
+                } else {
+                    XposedBridge.log("[INFO] Prefs file does not exist, using anonymous mode");
+                }
+            } catch (SecurityException e) {
+                XposedBridge.log("[ERR] File path access denied: " + e.getMessage());
+            }
+
+            // 构建API请求
+            try {
+                // 构建动态URL
+                String apiUrl = "https://picaapi.reiyy.com:2333/GetLaunchImage";
+                if (!username.isEmpty()) {
+                    apiUrl += "?user=" + URLEncoder.encode(username, "UTF-8");
+                    XposedBridge.log("[DEBUG] Requesting with user: " + username);
+                } else {
+                    XposedBridge.log("[INFO] Making anonymous image request");
+                }
+
+                // 网络请求
+                URL url = new URL(apiUrl);
+                //URL url = new URL("https://picaapi.reiyy.com:2333/GetLaunchImage");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(3000);
+                conn.setReadTimeout(3000);
+
+                InputStream is = conn.getInputStream();
+                StringBuilder response = new StringBuilder();
+                byte[] buffer = new byte[1024];
+                int len;
+                while ((len = is.read(buffer)) != -1) {
+                    response.append(new String(buffer, 0, len));
+                }
+                is.close();
+
+                JSONObject json = new JSONObject(response.toString());
+                String newImageName = json.getString("image_name");
+                String newBlurImageName = json.getString("blur_image_name");
+                String newImageUrl = json.getString("image_url");
+                String newBlurImageUrl = json.getString("blur_image_url");
+
+                if (!newImageName.equals(cachedImageName)) {
+                    downloadFile(newImageUrl, imagePath);
+                    cachedImageName = newImageName;
+                }
+                if (!newBlurImageName.equals(cachedBlurImageName)) {
+                    downloadFile(newBlurImageUrl, blurImagePath);
+                    cachedBlurImageName = newBlurImageName;
+                }
+
+                XposedBridge.log("Updated images: " + imagePath + " & " + blurImagePath);
+            } catch (Exception e) {
+                XposedBridge.log("Error fetching image URLs: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    // 下载启动图到本地
+    private void downloadFile(String urlStr, String outputPath) {
+        try {
+            URL url = new URL(urlStr);
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(5000);
+            conn.setReadTimeout(5000);
+
+            InputStream is = conn.getInputStream();
+            FileOutputStream fos = new FileOutputStream(new File(outputPath));
+            byte[] buffer = new byte[4096];
+            int len;
+            while ((len = is.read(buffer)) != -1) {
+                fos.write(buffer, 0, len);
+            }
+            fos.close();
+            is.close();
+            XposedBridge.log("File downloaded: " + outputPath);
+        } catch (Exception e) {
+            XposedBridge.log("Error downloading image: " + e.getMessage());
+        }
     }
 }
+
+
+    
+
