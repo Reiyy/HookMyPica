@@ -10,7 +10,6 @@ import android.view.ViewGroup;
 import android.app.Dialog;
 import android.widget.Button;
 
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
@@ -215,7 +214,7 @@ public class MainHook implements IXposedHookLoadPackage {
             lpparam.classLoader,
             "showUpdateApkAlertDialog",
             android.content.Context.class,
-            "com.picacomic.fregata.models.LatestApplicationObject",
+            Object.class,
             boolean.class,
             new XC_MethodHook() {
                 @Override
