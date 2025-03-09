@@ -226,7 +226,8 @@ public class MainHook implements IXposedHookLoadPackage {
                         XposedBridge.log("Dialog found!");
 
                         // 获取按钮
-                        Button button = dialog.findViewById(R.id.button_dialog_update_apk_positive);
+                        int buttonId = dialog.getContext().getResources().getIdentifier("button_dialog_update_apk_positive", "id", dialog.getContext().getPackageName());
+                        Button button = dialog.findViewById(buttonId);
                         if (button != null) {
                             XposedBridge.log("Button found! Hiding...");
                             button.setVisibility(View.GONE); // 隐藏按钮
