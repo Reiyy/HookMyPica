@@ -209,38 +209,16 @@ public class MainHook implements IXposedHookLoadPackage {
                         XposedHelpers.callMethod(splashActivity, "finish");
                     }
                 });
-        // 隐藏更新弹窗的按钮1
+        // 修改官方下载返回地址
         XposedHelpers.findAndHookMethod(
-            "com.picacomic.fregata.utils.views.AlertDialogCenter",
-            lpparam.classLoader,
-            "showUpdateApkAlertDialog",
-            Context.class,
-            XposedHelpers.findClass("com.picacomic.fregata.objects.LatestApplicationObject", lpparam.classLoader),
-            boolean.class,
-            new XC_MethodHook() {
+            "com.picacomic.fregata.utils.g", 
+            lpparam.classLoader, 
+            "aC", 
+            String.class,
+            new XC_MethodReplacement() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) {
-                    // 从方法参数中直接获取创建的Dialog实例
-                    Dialog dialog = (Dialog) XposedHelpers.getObjectField(param.args[0], "dialog");
-                    if (dialog == null) {
-                        XposedBridge.log("Failed to get Dialog instance");
-                        return;
-                    }
-                    
-                    // 确保视图已加载完成
-                    dialog.getWindow().getDecorView().post(() -> {
-                        // 动态获取目标应用中的按钮ID
-                        int buttonId = dialog.getContext().getResources()
-                            .getIdentifier("button_dialog_update_apk_positive", "id", lpparam.packageName);
-                        
-                        Button button = dialog.findViewById(buttonId);
-                        if (button != null) {
-                            XposedBridge.log("Button found! Setting visibility to GONE.");
-                            button.setVisibility(View.GONE);
-                        } else {
-                            XposedBridge.log("Failed to find button!");
-                        }
-                    });
+                protected Object replaceHookedMethod(MethodHookParam param) {
+                    return "https://picaapi.reiyy.com:2333/";
                 }
             }
         );
