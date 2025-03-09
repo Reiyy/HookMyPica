@@ -209,12 +209,18 @@ public class MainHook implements IXposedHookLoadPackage {
                     }
                 });
         // 隐藏更新弹窗的按钮1
+
+        Class<?> clazz = XposedHelpers.findClass("com.picacomic.fregata.utils.views.AlertDialogCenter", lpparam.classLoader);
+        for (Method method : clazz.getDeclaredMethods()) {
+            XposedBridge.log("Found method: " + method.toString());
+        }
+
         XposedHelpers.findAndHookMethod(
             "com.picacomic.fregata.utils.views.AlertDialogCenter",
             lpparam.classLoader,
             "showUpdateApkAlertDialog",
             Context.class,
-            Object.class,
+            XposedHelpers.findClass("com.picacomic.fregata.objects.LatestApplicationObject", lpparam.classLoader),
             boolean.class,
             new XC_MethodHook() {
                 @Override
