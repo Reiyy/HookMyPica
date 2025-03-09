@@ -213,7 +213,7 @@ public class MainHook implements IXposedHookLoadPackage {
             "com.picacomic.fregata.utils.views.AlertDialogCenter",
             lpparam.classLoader,
             "showUpdateApkAlertDialog",
-            android.content.Context.class,
+            Context.class,
             Object.class,
             boolean.class,
             new XC_MethodHook() {
@@ -221,6 +221,12 @@ public class MainHook implements IXposedHookLoadPackage {
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                     Dialog dialog = (Dialog) param.getResult();
                     if (dialog != null) {
+
+                        Context ctx = dialog.getContext();
+                        XposedBridge.log("Dialog Context: " + ctx.getClass().getName());
+
+                        XposedBridge.log("Before getResources: " + dialog.getContext().getResources());
+
                         Button button = dialog.findViewById(
                             dialog.getContext().getResources().getIdentifier(
                                 "button_dialog_update_apk_positive",
@@ -228,6 +234,9 @@ public class MainHook implements IXposedHookLoadPackage {
                                 lpparam.packageName
                             )
                         );
+
+                        XposedBridge.log("After getResources: " + dialog.getContext().getResources());
+
                         if (button != null) {
                             button.setVisibility(View.GONE); // 隐藏按钮
                         }
