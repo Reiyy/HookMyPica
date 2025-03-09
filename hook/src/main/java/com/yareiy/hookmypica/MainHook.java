@@ -210,14 +210,8 @@ public class MainHook implements IXposedHookLoadPackage {
                     }
                 });
         // 隐藏更新弹窗的按钮1
-
-        Class<?> clazz = XposedHelpers.findClass("com.picacomic.fregata.utils.views.AlertDialogCenter", lpparam.classLoader);
-        for (Method method : clazz.getDeclaredMethods()) {
-            XposedBridge.log("Found method: " + method.toString());
-        }
-
         XposedHelpers.findAndHookMethod(
-            "com.picacomic.fregata.utils.views.AlertDialogCenter",
+            "com.picacomic.fregata.utils.views.AlertDialogCenter", 
             lpparam.classLoader,
             "showUpdateApkAlertDialog",
             Context.class,
@@ -226,27 +220,21 @@ public class MainHook implements IXposedHookLoadPackage {
             new XC_MethodHook() {
                 @Override
                 protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                    Dialog dialog = (Dialog) param.getResult();
+                    // 获取 Dialog 实例
+                    Dialog dialog = (Dialog) param.thisObject;
                     if (dialog != null) {
+                        XposedBridge.log("Dialog found!");
 
-                        Context ctx = dialog.getContext();
-                        XposedBridge.log("Dialog Context: " + ctx.getClass().getName());
-
-                        XposedBridge.log("Before getResources: " + dialog.getContext().getResources());
-
-                        Button button = dialog.findViewById(
-                            dialog.getContext().getResources().getIdentifier(
-                                "button_dialog_update_apk_positive",
-                                "id",
-                                lpparam.packageName
-                            )
-                        );
-
-                        XposedBridge.log("After getResources: " + dialog.getContext().getResources());
-
+                        // 获取按钮
+                        Button button = dialog.findViewById(R.id.button_dialog_update_apk_positive);
                         if (button != null) {
+                            XposedBridge.log("Button found! Hiding...");
                             button.setVisibility(View.GONE); // 隐藏按钮
+                        } else {
+                            XposedBridge.log("Button not found!");
                         }
+                    } else {
+                        XposedBridge.log("Dialog is null!");
                     }
                 }
             }
