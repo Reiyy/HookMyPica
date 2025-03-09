@@ -21,6 +21,7 @@ import java.io.FileNotFoundException;
 import java.net.SocketTimeoutException;
 import java.net.MalformedURLException;
 import java.io.IOException;
+import java.lang.reflect.Method;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
