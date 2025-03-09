@@ -10,7 +10,6 @@ import android.view.ViewGroup;
 import android.app.Dialog;
 import android.widget.Button;
 
-
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.FileInputStream;
@@ -22,12 +21,14 @@ import java.io.FileNotFoundException;
 import java.net.SocketTimeoutException;
 import java.net.MalformedURLException;
 import java.io.IOException;
+import java.lang.reflect.Method;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import de.robv.android.xposed.XC_MethodReplacement;
 import org.json.JSONObject;
 import org.json.JSONException;
 import org.xmlpull.v1.XmlPullParser;
@@ -209,30 +210,16 @@ public class MainHook implements IXposedHookLoadPackage {
                         XposedHelpers.callMethod(splashActivity, "finish");
                     }
                 });
-        // 隐藏更新弹窗的按钮1
+        // 修改官方下载返回地址
         XposedHelpers.findAndHookMethod(
-            "com.picacomic.fregata.utils.views.AlertDialogCenter",
-            lpparam.classLoader,
-            "showUpdateApkAlertDialog",
-            android.content.Context.class,
-            "com.picacomic.fregata.models.LatestApplicationObject",
-            boolean.class,
-            new XC_MethodHook() {
+            "com.picacomic.fregata.utils.g", 
+            lpparam.classLoader, 
+            "aC", 
+            String.class,
+            new XC_MethodReplacement() {
                 @Override
-                protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                    Dialog dialog = (Dialog) param.getResult();
-                    if (dialog != null) {
-                        Button button = dialog.findViewById(
-                            dialog.getContext().getResources().getIdentifier(
-                                "button_dialog_update_apk_positive",
-                                "id",
-                                lpparam.packageName
-                            )
-                        );
-                        if (button != null) {
-                            button.setVisibility(View.GONE); // 隐藏按钮
-                        }
-                    }
+                protected Object replaceHookedMethod(MethodHookParam param) {
+                    return "https://picaapi.reiyy.com:2333/";
                 }
             }
         );
