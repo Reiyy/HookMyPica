@@ -52,6 +52,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
     private static final String OLD_URL = "https://picaapi.reiyy.com:2333/";
     private static final String NEW_URL = "https://testpicaapi.reiyy.com:2333/";
+    private static final String CONFIG_PATH = "Android/data/com.yareiy.mypica/config.json";
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
@@ -75,6 +76,7 @@ public class MainHook implements IXposedHookLoadPackage {
         // XposedBridge.log("Image path: " + imagePath);
         // XposedBridge.log("Blur image path: " + blurImagePath);
 
+        // Hook登录页，添加logo点击事件
         XposedHelpers.findAndHookMethod(
                 "com.picacomic.fregata.fragments.LoginFragment",
                 lpparam.classLoader,
@@ -105,8 +107,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 }
         );
 
-
-        // 修改后端API URL
+        // 替换API地址
         XposedHelpers.findAndHookMethod(
                 "retrofit2.Retrofit$Builder",
                 lpparam.classLoader,
@@ -117,16 +118,23 @@ public class MainHook implements IXposedHookLoadPackage {
                     protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
                         String url = (String) param.args[0];
 
+                        // 只拦截目标URL
                         if (url != null && url.equals(OLD_URL)) {
-                            param.args[0] = NEW_URL;
-                            XposedBridge.log("[HookMyPica] 成功修改baseUrl: " + OLD_URL + " → " + NEW_URL);
+                            String customUrl = getUrlFromConfig();
+
+                            if (customUrl != null) {
+                                // 配置文件存在，使用配置文件URL替换
+                                param.args[0] = customUrl;
+                                XposedBridge.log("[HookMyPica] 已读取配置，替换URL: " + OLD_URL + " → " + customUrl);
+                            } else {
+                                // 如果未配置，使用原始URL并弹出提示
+                                XposedBridge.log("[HookMyPica] 未找到配置文件，使用原始URL");
+                                showToastOnUI("哔咔桥API未配置！点击哔咔娘五次进行配置");
+                            }
                         }
-                        XposedBridge.log("[HookMyPica] 未匹配旧url，跳过修改");
                     }
                 }
         );
-
-    
 
         // Hook Picasso 加载动态启动图
         XposedHelpers.findAndHookMethod(
@@ -430,18 +438,30 @@ public class MainHook implements IXposedHookLoadPackage {
 
     // 显示配置窗口
     private void showConfigDialog(final Context context) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        AlertDialog.Builder builder = new AlertDialog.Builder(context, android.R.style.Theme_Material_Light_Dialog_Alert);
+        
         builder.setTitle("哔咔桥API配置");
         builder.setMessage("输入API URL：");
 
-        // 动态创建一个输入框
+        // 动态创建输入框
         final EditText input = new EditText(context);
-        input.setHint("https://picaapi.example.com");
+        input.setHint("https://picaaapi.example.com");
+        
+        // 强制设置输入文字颜色为黑色
+        input.setTextColor(android.graphics.Color.BLACK);
+        input.setHintTextColor(android.graphics.Color.GRAY);
+
+        // 设置边距
+        LinearLayout container = new LinearLayout(context);
+        container.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.MATCH_PARENT);
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(60, 20, 60, 0); // 左右边距
         input.setLayoutParams(lp);
-        builder.setView(input);
+        container.addView(input);
+        
+        builder.setView(container);
 
         builder.setPositiveButton("保存", new DialogInterface.OnClickListener() {
             @Override
@@ -477,6 +497,37 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log("[HookMyPica] Error: " + e.getMessage());
             Toast.makeText(context, "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
         }
+    }
+
+    // 从配置文件读取URL
+    private String getUrlFromConfig() {
+        try {
+            File file = new File(Environment.getExternalStorageDirectory(), CONFIG_PATH);
+            if (file.exists()) {
+                BufferedReader br = new BufferedReader(new FileReader(file));
+                String line = br.readLine();
+                br.close();
+                if (line != null && !line.trim().isEmpty()) {
+                    return line.trim();
+                }
+            }
+        } catch (Exception e) {
+            XposedBridge.log("[HookMyPica] 读取配置失败: " + e.getMessage());
+        }
+        return null;
+    }
+
+    // 在UI层弹出Toast
+    private void showToastOnUI(final String msg) {
+        new Handler(Looper.getMainLooper()).post(new Runnable() {
+            @Override
+            public void run() {
+                // 使用 AndroidAppHelper 获取当前应用的 Context
+                if (AndroidAppHelper.currentApplication() != null) {
+                    Toast.makeText(AndroidAppHelper.currentApplication(), msg, Toast.LENGTH_LONG).show();
+                }
+            }
+        });
     }
 
 
