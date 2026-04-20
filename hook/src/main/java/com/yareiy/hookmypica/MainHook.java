@@ -1,17 +1,14 @@
 package com.yareiy.hookmypica;
 
-import android.app.AlertDialog;
+import android.app.Activity;
 import android.content.Context;
-import android.content.DialogInterface;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.text.TextUtils;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.app.Dialog;
 import android.widget.Button;
-import android.widget.EditText;
-import android.widget.ImageView;
-import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -24,231 +21,32 @@ import java.io.FileNotFoundException;
 import java.net.SocketTimeoutException;
 import java.net.MalformedURLException;
 import java.io.IOException;
+import java.lang.reflect.Method;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
-import de.robv.android.xposed.XC_MethodReplacement;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 import de.robv.android.xposed.callbacks.XC_LoadPackage;
+import de.robv.android.xposed.XC_MethodReplacement;
 import org.json.JSONObject;
+import org.json.JSONException;
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserFactory;
 
 @SuppressWarnings("RedundantThrows")
 public class MainHook implements IXposedHookLoadPackage {
-
     private String cacheDir;
     private String imagePath;
     private String blurImagePath;
     private String cachedImageName;
     private String cachedBlurImageName;
 
-    //  自定义后端URL配置
-    private static final String PACKAGE_NAME = "com.picacomic.fregata";
-    private static final String DEFAULT_URL = "https://picaapi.reiyy.com:2333/";
-    private static final String PREF_NAME = "pica_custom_config";
-    private static final String KEY_BASE_URL = "base_url";
-
-    private static String customBaseUrl = null;
-    private static boolean signerHookSet = false;
-
-    private static void initCustomBaseUrl(Context context) {
-        if (customBaseUrl != null) return;
-        try {
-            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            customBaseUrl = prefs.getString(KEY_BASE_URL, DEFAULT_URL);
-            XposedBridge.log("PicaUrlModifier: 加载自定义URL -> " + customBaseUrl);
-        } catch (Exception e) {
-            XposedBridge.log("PicaUrlModifier: 加载URL失败，使用默认值");
-            customBaseUrl = DEFAULT_URL;
-        }
-    }
-
-    private static String getCustomBaseUrl() {
-        return customBaseUrl != null ? customBaseUrl : DEFAULT_URL;
-    }
-
-    private static void showConfigDialog(Context context) {
-        if (context == null) return;
-        try {
-            AlertDialog.Builder builder = new AlertDialog.Builder(context);
-            final EditText input = new EditText(context);
-            input.setText(getCustomBaseUrl());
-            input.setHint("https://你的服务器:2333/");
-
-            builder.setTitle("自定义后端 URL");
-            builder.setMessage("输入新的 API 地址（必须以 / 结尾）\n保存后请重启 App 生效");
-            builder.setView(input);
-
-            builder.setPositiveButton("保存", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface dialog, int which) {
-                    String newUrl = input.getText().toString().trim();
-                    if (newUrl.isEmpty()) {
-                        Toast.makeText(context, "URL 不能为空", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    if (!newUrl.endsWith("/")) newUrl += "/";
-                    if (!newUrl.startsWith("http")) {
-                        Toast.makeText(context, "URL 必须以 http:// 或 https:// 开头", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-
-                    SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-                    prefs.edit().putString(KEY_BASE_URL, newUrl).apply();
-                    customBaseUrl = newUrl;
-
-                    Toast.makeText(context, "配置已保存！\n新 URL: " + newUrl + "\n请重启 App 生效", Toast.LENGTH_LONG).show();
-                }
-            });
-
-            builder.setNegativeButton("取消", null);
-            builder.show();
-        } catch (Exception e) {
-            XposedBridge.log("PicaUrlModifier: 显示配置弹窗失败 " + e);
-        }
-    }
+    private static final String OLD_URL = "https://picaapi.reiyy.com:2333/";
+    private static final String NEW_URL = "https://testpicaapi.reiyy.com:2333/";
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        if (!PACKAGE_NAME.equals(lpparam.packageName)) return;
-
-        XposedBridge.log("PicaUrlModifier: 已注入 " + PACKAGE_NAME);
-
-        // 自定义后端 URL Hook
-        // 在 d / e 构造器中初始化配置
-        XposedHelpers.findAndHookMethod(
-                "com.picacomic.fregata.b.d",
-                lpparam.classLoader,
-                "<init>",
-                Context.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        initCustomBaseUrl((Context) param.args[0]);
-                    }
-                });
-
-        XposedHelpers.findAndHookMethod(
-                "com.picacomic.fregata.b.e",
-                lpparam.classLoader,
-                "<init>",
-                Context.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        initCustomBaseUrl((Context) param.args[0]);
-                    }
-                });
-
-        // 替换 Retrofit baseUrl
-        XposedHelpers.findAndHookMethod(
-                "retrofit2.Retrofit$Builder",
-                lpparam.classLoader,
-                "baseUrl",
-                String.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        String url = (String) param.args[0];
-                        if (DEFAULT_URL.equals(url)) {
-                            param.args[0] = getCustomBaseUrl();
-                            XposedBridge.log("PicaUrlModifier: baseUrl 已替换为 " + getCustomBaseUrl());
-                        }
-                    }
-                });
-
-        // 替换 interceptor 中的 .replace(...)
-        XposedHelpers.findAndHookMethod(
-                "java.lang.String",
-                lpparam.classLoader,
-                "replace",
-                CharSequence.class,
-                CharSequence.class,
-                new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) {
-                        if (param.args[0] instanceof String && DEFAULT_URL.equals(param.args[0])) {
-                            param.args[0] = getCustomBaseUrl();
-                            XposedBridge.log("PicaUrlModifier: String.replace 目标已替换");
-                        }
-                    }
-                });
-
-        // 替换 signature 数组中的 base URL
-        XposedHelpers.findAndHookMethod(
-                "com.picacomic.fregata.MyApplication",
-                lpparam.classLoader,
-                "bx",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        if (signerHookSet) return;
-                        Object signer = param.getResult();
-                        if (signer != null) {
-                            signerHookSet = true;
-                            Class<?> signerClass = signer.getClass();
-                            XposedHelpers.findAndHookMethod(
-                                    signerClass,
-                                    "c",
-                                    String[].class,
-                                    new XC_MethodHook() {
-                                        @Override
-                                        protected void beforeHookedMethod(MethodHookParam param2) {
-                                            if (param2.args[0] instanceof String[]) {
-                                                String[] arr = (String[]) param2.args[0];
-                                                if (arr.length > 0 && DEFAULT_URL.equals(arr[0])) {
-                                                    arr[0] = getCustomBaseUrl();
-                                                    XposedBridge.log("PicaUrlModifier: signature 数组 base 已替换");
-                                                }
-                                            }
-                                        }
-                                    });
-                            XposedBridge.log("PicaUrlModifier: 已成功 Hook signer.c 方法");
-                        }
-                    }
-                });
-
-        // 登录页面 Logo 点击 5 次打开配置页面
-        XposedHelpers.findAndHookMethod(
-                "com.picacomic.fregata.fragments.LoginFragment",
-                lpparam.classLoader,
-                "bH",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) {
-                        Object logoObj = XposedHelpers.getObjectField(param.thisObject, "imageView_logo");
-                        if (logoObj instanceof ImageView) {
-                            ImageView logo = (ImageView) logoObj;
-                            if (!"pica_config_listener".equals(logo.getTag())) {
-                                logo.setTag("pica_config_listener");
-                                logo.setOnClickListener(new View.OnClickListener() {
-                                    private int clickCount = 0;
-                                    private long lastClickTime = 0L;
-
-                                    @Override
-                                    public void onClick(View v) {
-                                        long now = System.currentTimeMillis();
-                                        if (now - lastClickTime > 3000) {
-                                            clickCount = 1;
-                                        } else {
-                                            clickCount++;
-                                        }
-                                        lastClickTime = now;
-
-                                        if (clickCount >= 5) {
-                                            clickCount = 0;
-                                            showConfigDialog(v.getContext());
-                                        }
-                                    }
-                                });
-                                XposedBridge.log("PicaUrlModifier: 已为登录 Logo 添加 5 击配置监听");
-                            }
-                        }
-                    }
-                });
-
         XposedBridge.log("handleLoadPackage: " + lpparam.processName + ", " + lpparam.processName);
 
         // 动态启动图缓存路径
@@ -268,6 +66,29 @@ public class MainHook implements IXposedHookLoadPackage {
         // XposedBridge.log("Cache dir: " + cacheDir);
         // XposedBridge.log("Image path: " + imagePath);
         // XposedBridge.log("Blur image path: " + blurImagePath);
+
+
+        // 修改后端API URL
+        XposedHelpers.findAndHookMethod(
+                "retrofit2.Retrofit$Builder",
+                lpparam.classLoader,
+                "baseUrl",
+                String.class,
+                new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        String url = (String) param.args[0];
+
+                        if (url != null && url.equals(OLD_URL)) {
+                            param.args[0] = NEW_URL;
+                            XposedBridge.log("[HookMyPica] 成功修改baseUrl: " + OLD_URL + " → " + NEW_URL);
+                        }
+                        XposedBridge.log("[HookMyPica] 未匹配旧url，跳过修改");
+                    }
+                }
+        );
+
+    }
 
         // Hook Picasso 加载动态启动图
         XposedHelpers.findAndHookMethod(
@@ -568,13 +389,6 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log("Error downloading image: " + e.getMessage());
         }
     }
-
-
-
-
-
-
-
 }
 
 
