@@ -295,6 +295,7 @@ public class MainHook implements IXposedHookLoadPackage {
             new XC_MethodReplacement() {
                 @Override
                 protected Object replaceHookedMethod(MethodHookParam param) {
+                    String configUrl = getUrlFromConfig();
                     return (configUrl != null) ? configUrl : OLD_URL;
                 }
             }
@@ -373,7 +374,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 if (baseUrl == null) {
                         baseUrl = OLD_URL; // 默认地址
                     }
-                tring apiUrl = baseUrl + "GetLaunchImage";
+                String apiUrl = baseUrl + "GetLaunchImage";
                 if (!username.isEmpty()) {
                     apiUrl += "?user=" + URLEncoder.encode(username, "UTF-8");
                     XposedBridge.log("[DEBUG] Requesting with user: " + username);
