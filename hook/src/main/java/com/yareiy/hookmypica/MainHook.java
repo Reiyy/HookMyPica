@@ -16,6 +16,8 @@ import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.Toast;
+import android.os.Handler;
+import android.os.Looper;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -29,6 +31,8 @@ import java.net.SocketTimeoutException;
 import java.net.MalformedURLException;
 import java.io.IOException;
 import java.lang.reflect.Method;
+import java.io.BufferedReader;
+import java.io.FileReader;
 
 import de.robv.android.xposed.IXposedHookLoadPackage;
 import de.robv.android.xposed.XC_MethodHook;
