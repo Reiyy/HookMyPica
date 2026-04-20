@@ -54,8 +54,7 @@ public class MainHook implements IXposedHookLoadPackage {
     private String cachedBlurImageName;
     private int clickCount = 0; // 点击次数记录
 
-    private static final String OLD_URL = "https://picaapi.reiyy.com:2333/";
-    private static final String NEW_URL = "https://testpicaapi.reiyy.com:2333/";
+    private static final String OLD_URL = "https://picaapi.picabridgeapiexample.com:2333/";
     private static final String CONFIG_PATH = "Android/data/com.yareiy.mypica/ApiConfig.txt";
 
     @Override
