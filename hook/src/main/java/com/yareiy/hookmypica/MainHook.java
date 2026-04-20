@@ -526,9 +526,15 @@ public class MainHook implements IXposedHookLoadPackage {
         new Handler(Looper.getMainLooper()).post(new Runnable() {
             @Override
             public void run() {
-                // 使用 AndroidAppHelper 获取当前应用的 Context
-                if (AndroidAppHelper.currentApplication() != null) {
-                    Toast.makeText(AndroidAppHelper.currentApplication(), msg, Toast.LENGTH_LONG).show();
+                try {
+                    Class<?> atClass = Class.forName("android.app.ActivityThread");
+                    Object at = atClass.getMethod("currentActivityThread").invoke(null);
+                    Context app = (Context) atClass.getMethod("getApplication").invoke(at);
+                    if (app != null) {
+                        Toast.makeText(app, msg, Toast.LENGTH_LONG).show();
+                    }
+                } catch (Exception e) {
+                    XposedBridge.log("[HookMyPica] 无法弹出 Toast: " + e.getMessage());
                 }
             }
         });
