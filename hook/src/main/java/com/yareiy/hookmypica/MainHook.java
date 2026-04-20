@@ -56,7 +56,7 @@ public class MainHook implements IXposedHookLoadPackage {
 
     private static final String OLD_URL = "https://picaapi.reiyy.com:2333/";
     private static final String NEW_URL = "https://testpicaapi.reiyy.com:2333/";
-    private static final String CONFIG_PATH = "Android/data/com.yareiy.mypica/config.json";
+    private static final String CONFIG_PATH = "Android/data/com.yareiy.mypica/ApiConfig.txt";
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
@@ -133,7 +133,7 @@ public class MainHook implements IXposedHookLoadPackage {
                             } else {
                                 // 如果未配置，使用原始URL并弹出提示
                                 XposedBridge.log("[HookMyPica] 未找到配置文件，使用原始URL");
-                                showToastOnUI("哔咔桥API未配置！点击哔咔娘五次进行配置");
+                                showToastOnUI("哔咔桥API未配置！打哔咔五次进行配置");
                             }
                         }
                     }
@@ -295,7 +295,7 @@ public class MainHook implements IXposedHookLoadPackage {
             new XC_MethodReplacement() {
                 @Override
                 protected Object replaceHookedMethod(MethodHookParam param) {
-                    return "https://picaapi.reiyy.com:2333/";
+                    return (configUrl != null) ? configUrl : OLD_URL;
                 }
             }
         );
@@ -369,7 +369,11 @@ public class MainHook implements IXposedHookLoadPackage {
             // 构建API请求
             try {
                 // 构建动态URL
-                String apiUrl = "https://picaapi.reiyy.com:2333/GetLaunchImage";
+                String baseUrl = getUrlFromConfig();
+                if (baseUrl == null) {
+                        baseUrl = OLD_URL; // 默认地址
+                    }
+                tring apiUrl = baseUrl + "GetLaunchImage";
                 if (!username.isEmpty()) {
                     apiUrl += "?user=" + URLEncoder.encode(username, "UTF-8");
                     XposedBridge.log("[DEBUG] Requesting with user: " + username);
@@ -443,19 +447,23 @@ public class MainHook implements IXposedHookLoadPackage {
     // 显示配置窗口
     private void showConfigDialog(final Context context) {
         AlertDialog.Builder builder = new AlertDialog.Builder(context, android.R.style.Theme_Material_Light_Dialog_Alert);
-        
-        builder.setTitle("哔咔桥API配置");
-        builder.setMessage("输入API URL：");
+        builder.setTitle("哔咔桥 API配置");
+        builder.setMessage("输入API地址：");
 
-        // 动态创建输入框
+        // 创建配置输入框
         final EditText input = new EditText(context);
-        input.setHint("https://picaaapi.example.com");
-        
-        // 强制设置输入文字颜色为黑色
+        input.setSingleLine(true); // 强制单行
         input.setTextColor(android.graphics.Color.BLACK);
-        input.setHintTextColor(android.graphics.Color.GRAY);
+        
+        // 读取已配置的URL，如果不存在则显示默认示例
+        String currentConfig = getUrlFromConfig();
+        if (currentConfig != null) {
+            input.setText(currentConfig);
+        } else {
+            input.setHint("https://picaapi.example.com:2333/");
+        }
 
-        // 设置边距
+        // 设置输入框边距
         LinearLayout container = new LinearLayout(context);
         container.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
@@ -464,23 +472,41 @@ public class MainHook implements IXposedHookLoadPackage {
         lp.setMargins(60, 20, 60, 0); // 左右边距
         input.setLayoutParams(lp);
         container.addView(input);
-        
         builder.setView(container);
 
-        builder.setPositiveButton("保存", new DialogInterface.OnClickListener() {
+        builder.setPositiveButton("保存", null);
+        builder.setNegativeButton("取消", null);
+
+        final AlertDialog dialog = builder.create();
+        dialog.show();
+
+        // 保存时进行格式校验
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(new View.OnClickListener() {
             @Override
-            public void onClick(DialogInterface dialog, int which) {
+            public void onClick(View v) {
                 String url = input.getText().toString().trim();
-                if (!url.isEmpty()) {
+                
+                if (url.isEmpty()) {
+                    input.setError("内容不能为空");
+                    return;
+                }
+
+                String regex = "^https?://[^/]+/?$";
+                
+                if (url.matches(regex)) {
+                    // 格式正确，确保结尾带 /
+                    if (!url.endsWith("/")) {
+                        url += "/";
+                    }
                     saveUrlToFile(context, url);
+                    dialog.dismiss(); // 校验通过关闭窗口
                 } else {
-                    Toast.makeText(context, "内容不能为空", Toast.LENGTH_SHORT).show();
+                    // 格式错误
+                    input.setError("URL格式不正确，不能包含路径！");
+                    Toast.makeText(context, "输入的URL格式不正确，不能包含路径！", Toast.LENGTH_SHORT).show();
                 }
             }
         });
-
-        builder.setNegativeButton("取消", null);
-        builder.show();
     }
 
     private void saveUrlToFile(Context context, String url) {
@@ -490,12 +516,12 @@ public class MainHook implements IXposedHookLoadPackage {
                 dir.mkdirs();
             }
 
-            File configFile = new File(dir, "config.json");
+            File configFile = new File(dir, "ApiConfig.txt");
             FileOutputStream fos = new FileOutputStream(configFile);
             fos.write(url.getBytes());
             fos.close();
 
-            Toast.makeText(context, "配置已保存至: " + configFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
+            Toast.makeText(context, "API配置已保存！", Toast.LENGTH_LONG).show();
             XposedBridge.log("[HookMyPica] 配置已保存到 " + configFile.getAbsolutePath());
         } catch (Exception e) {
             XposedBridge.log("[HookMyPica] Error: " + e.getMessage());
