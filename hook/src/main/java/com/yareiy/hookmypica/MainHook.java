@@ -88,7 +88,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 }
         );
 
-    }
+    
 
         // Hook Picasso 加载动态启动图
         XposedHelpers.findAndHookMethod(
