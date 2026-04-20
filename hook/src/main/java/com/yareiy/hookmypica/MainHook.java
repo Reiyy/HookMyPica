@@ -9,6 +9,13 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.app.Dialog;
 import android.widget.Button;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
+import android.os.Environment;
+import android.widget.EditText;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.Toast;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -41,6 +48,7 @@ public class MainHook implements IXposedHookLoadPackage {
     private String blurImagePath;
     private String cachedImageName;
     private String cachedBlurImageName;
+    private int clickCount = 0; // 点击次数记录
 
     private static final String OLD_URL = "https://picaapi.reiyy.com:2333/";
     private static final String NEW_URL = "https://testpicaapi.reiyy.com:2333/";
@@ -66,6 +74,36 @@ public class MainHook implements IXposedHookLoadPackage {
         // XposedBridge.log("Cache dir: " + cacheDir);
         // XposedBridge.log("Image path: " + imagePath);
         // XposedBridge.log("Blur image path: " + blurImagePath);
+
+        XposedHelpers.findAndHookMethod(
+                "com.picacomic.fregata.fragments.LoginFragment",
+                lpparam.classLoader,
+                "bH",
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                        final Object fragmentInstance = param.thisObject;
+                        final Context context = (Context) XposedHelpers.callMethod(fragmentInstance, "getContext");
+
+                        // 获取布局中的logo实例
+                        final ImageView logo = (ImageView) XposedHelpers.getObjectField(fragmentInstance, "imageView_logo");
+
+                        if (logo != null) {
+                            logo.setOnClickListener(new View.OnClickListener() {
+                                @Override
+                                public void onClick(View v) {
+                                    clickCount++;
+                                    if (clickCount >= 5) {
+                                        clickCount = 0; // 重置计数
+                                        showConfigDialog(context);
+                                    }
+                                }
+                            });
+                            XposedBridge.log("[HookMyPica] 成功Hook启动页logo");
+                        }
+                    }
+                }
+        );
 
 
         // 修改后端API URL
@@ -389,6 +427,59 @@ public class MainHook implements IXposedHookLoadPackage {
             XposedBridge.log("Error downloading image: " + e.getMessage());
         }
     }
+
+    // 显示配置窗口
+    private void showConfigDialog(final Context context) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle("哔咔桥API配置");
+        builder.setMessage("输入API URL：");
+
+        // 动态创建一个输入框
+        final EditText input = new EditText(context);
+        input.setHint("https://picaapi.example.com");
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.MATCH_PARENT);
+        input.setLayoutParams(lp);
+        builder.setView(input);
+
+        builder.setPositiveButton("保存", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                String url = input.getText().toString().trim();
+                if (!url.isEmpty()) {
+                    saveUrlToFile(context, url);
+                } else {
+                    Toast.makeText(context, "内容不能为空", Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+
+        builder.setNegativeButton("取消", null);
+        builder.show();
+    }
+
+    private void saveUrlToFile(Context context, String url) {
+        try {
+            File dir = new File(Environment.getExternalStorageDirectory(), "Android/data/com.yareiy.mypica");
+            if (!dir.exists()) {
+                dir.mkdirs();
+            }
+
+            File configFile = new File(dir, "config.json");
+            FileOutputStream fos = new FileOutputStream(configFile);
+            fos.write(url.getBytes());
+            fos.close();
+
+            Toast.makeText(context, "配置已保存至: " + configFile.getAbsolutePath(), Toast.LENGTH_LONG).show();
+            XposedBridge.log("[HookMyPica] 配置已保存到 " + configFile.getAbsolutePath());
+        } catch (Exception e) {
+            XposedBridge.log("[HookMyPica] Error: " + e.getMessage());
+            Toast.makeText(context, "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+
 }
 
 
