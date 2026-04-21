@@ -403,7 +403,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
                 // 使用更安全的双重保险替换方法
                 safeReplaceResource(resparam, filterKeywords, "1", "comic_list_filter_forbidden", 0x7f0f00ff);
                 safeReplaceResource(resparam, filterKeywords, "2", "comic_list_filter_non_chinese", 0x7f0f0100);
-                safeReplaceResource(resparam, filterKeywords, "3", "comic_list_filter_button_bl", 0x7f0f00ef);
+                safeReplaceResource(resparam, filterKeywords, "3", "comic_list_filter_bl", 0x7f0f00ee);
 
             } catch (Exception e) {
                 XposedBridge.log("HookMyPica: 资源处理逻辑异常: " + e.getMessage());
