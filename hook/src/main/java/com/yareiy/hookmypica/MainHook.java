@@ -99,35 +99,42 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
                 });
 
         // Hook登录页，添加logo点击事件
-        XposedHelpers.findAndHookMethod(
+        Class<?> clazz = XposedHelpers.findClassIfExists(
                 "com.picacomic.fregata.fragments.LoginFragment",
-                lpparam.classLoader,
-                "bH",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        final Object fragmentInstance = param.thisObject;
-                        final Context context = (Context) XposedHelpers.callMethod(fragmentInstance, "getContext");
+                lpparam.classLoader
+        );
 
-                        // 获取布局中的logo实例
-                        final ImageView logo = (ImageView) XposedHelpers.getObjectField(fragmentInstance, "imageView_logo");
+        if (clazz != null) {
+            XposedHelpers.findAndHookMethod(
+                    clazz,
+                    "bH",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                            final Object fragmentInstance = param.thisObject;
+                            final Context context = (Context) XposedHelpers.callMethod(fragmentInstance, "getContext");
 
-                        if (logo != null) {
-                            logo.setOnClickListener(new View.OnClickListener() {
-                                @Override
-                                public void onClick(View v) {
-                                    clickCount++;
-                                    if (clickCount >= 5) {
-                                        clickCount = 0; // 重置计数
-                                        showConfigDialog(context);
+                            final ImageView logo = (ImageView) XposedHelpers.getObjectField(fragmentInstance, "imageView_logo");
+
+                            if (logo != null) {
+                                logo.setOnClickListener(new View.OnClickListener() {
+                                    @Override
+                                    public void onClick(View v) {
+                                        clickCount++;
+                                        if (clickCount >= 5) {
+                                            clickCount = 0;
+                                            showConfigDialog(context);
+                                        }
                                     }
-                                }
-                            });
-                            XposedBridge.log("[HookMyPica] 成功Hook启动页logo");
+                                });
+                                //XposedBridge.log("[HookMyPica] 成功Hook启动页logo");
+                            }
                         }
                     }
-                }
-        );
+            );
+        } else {
+            XposedBridge.log("[HookMyPica] LoginFragment 不存在");
+        }
 
         // 替换API地址
         XposedHelpers.findAndHookMethod(
@@ -147,7 +154,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
                             if (customUrl != null) {
                                 // 配置文件存在，使用配置文件URL替换
                                 param.args[0] = customUrl;
-                                XposedBridge.log("[HookMyPica] 已读取配置，替换URL: " + OLD_URL + " → " + customUrl);
+                                //XposedBridge.log("[HookMyPica] 已读取配置，替换URL: " + OLD_URL + " → " + customUrl);
                             } else {
                                 // 如果未配置，使用原始URL并弹出提示
                                 XposedBridge.log("[HookMyPica] 未找到配置文件，使用原始URL");
@@ -365,7 +372,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
                             
                             if (dynamicKeywords != null) {
                                 XposedHelpers.setObjectField(adapterInstance, "js", dynamicKeywords);
-                                XposedBridge.log("HookMyPica: 成功替换屏蔽关键词数组！");
+                                //XposedBridge.log("HookMyPica: 成功替换屏蔽关键词数组！");
                             }
                         }
                     });
@@ -386,7 +393,6 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
     @Override
     public void handleInitPackageResources(XC_InitPackageResources.InitPackageResourcesParam resparam) throws Throwable {
         if (!resparam.packageName.equals("com.yareiy.mypica")) return;
-        XposedBridge.log("HookMyPica: 开始替换资源文本...");
 
         JSONObject config = loadLocalConfig();
             if (config == null || !config.has("FilterKeywords")) return;
@@ -797,9 +803,9 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
                     // 优先使用名称替换
                     resparam.res.setReplacement("com.yareiy.mypica", "string", resName, newValue);
                 } catch (Throwable t) {
-                    // 如果名称找不到，ID
+                    // 如果名称找不到，使用ID
                     resparam.res.setReplacement(resId, newValue);
-                    XposedBridge.log("HookMyPica: 名称查找失败，已通过 ID " + Integer.toHexString(resId) + " 强制替换");
+                    XposedBridge.log("HookMyPica: 名称查找失败，通过 ID " + Integer.toHexString(resId) + " 替换");
                 }
             }
         } catch (Exception e) {
