@@ -802,6 +802,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
                 
                 // 将文本转为竖排
                 //String newValue = rawValue.replaceAll("(.)", "$1\n").trim();
+                String newValue = rawValue;
                 
                 try {
                     // 优先使用名称替换
