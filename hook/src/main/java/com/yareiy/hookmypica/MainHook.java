@@ -798,10 +798,10 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
         try {
             if (keywordsObj.has(jsonKey)) {
                 // 从数组中取出第一个文本
-                String rawValue = keywordsObj.getJSONArray(jsonKey).getString(0);
+                String rawValue = keywordsObj.getJSONArray(jsonKey).getString(2);
                 
                 // 将文本转为竖排
-                String newValue = rawValue.replaceAll("(.)", "$1\n").trim();
+                //String newValue = rawValue.replaceAll("(.)", "$1\n").trim();
                 
                 try {
                     // 优先使用名称替换
