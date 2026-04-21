@@ -19,6 +19,7 @@ import android.widget.Toast;
 import android.os.Handler;
 import android.os.Looper;
 import android.app.Application;
+import android.content.res.XResources;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -49,9 +50,11 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserFactory;
 import org.json.JSONArray;
 import org.json.JSONObject;
+import de.robv.android.xposed.IXposedHookInitPackageResources;
+import de.robv.android.xposed.callbacks.XC_InitPackageResources;
 
 @SuppressWarnings("RedundantThrows")
-public class MainHook implements IXposedHookLoadPackage {
+public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageResources {
     private String cacheDir;
     private String imagePath;
     private String blurImagePath;
@@ -379,6 +382,25 @@ public class MainHook implements IXposedHookLoadPackage {
 
     }
 
+
+    @Override
+    public void handleInitPackageResources(XC_InitPackageResources.InitPackageResourcesParam resparam) throws Throwable {
+        if (!resparam.packageName.equals("com.picacomic.fregata")) return;
+
+        JSONObject config = loadLocalConfig();
+        if (config == null || !config.has("FilterKeywords")) return;
+
+        try {
+            JSONObject filterKeywords = config.getJSONObject("FilterKeywords");
+            // 资源名替换
+            replaceStringRes(resparam, filterKeywords, "1", "comic_list_filter_forbidden");
+            replaceStringRes(resparam, filterKeywords, "2", "comic_list_filter_non_chinese");
+            replaceStringRes(resparam, filterKeywords, "3", "comic_list_filter_button_bl");
+        } catch (Exception e) {
+            XposedBridge.log("HookMyPica: 资源替换出错: " + e.getMessage());
+        }
+    }
+
     // 通过API获取最新的启动图URL，并缓存到本地
     private void fetchAndUpdateImages() {
         new Thread(() -> {
@@ -640,46 +662,6 @@ public class MainHook implements IXposedHookLoadPackage {
         });
     }
 
-    // 获取屏蔽关键词配置并保存
-    private void fetchAndSaveConfigAsync() {
-        new Thread(() -> {
-            try {
-                String baseUrl = getUrlFromConfig();
-                if (baseUrl == null || baseUrl.isEmpty()) {
-                    baseUrl = OLD_URL;
-                }
-                
-                if (!baseUrl.endsWith("/")) {
-                    baseUrl += "/";
-                }
-                
-                String apiUrl = baseUrl + "GetFilterKeywords";
-                URL url = new URL(apiUrl);
-                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
-                connection.setConnectTimeout(5000);
-                connection.setReadTimeout(5000);
-
-                if (connection.getResponseCode() == 200) {
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8));
-                    StringBuilder response = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        response.append(line);
-                    }
-                    reader.close();
-
-                    // 写入本地文件
-                    saveConfigToFile(response.toString());
-                    // 清理内存缓存，下次读取新文件
-                    cachedFilterConfig = null; 
-                }
-                connection.disconnect();
-            } catch (Exception e) {
-                XposedBridge.log("HookMyPica 网络获取配置失败: " + e.getMessage());
-            }
-        }).start();
-    }
 
     // 保存配置到文件
     private void saveConfigToFile(String jsonString) {
@@ -726,6 +708,47 @@ public class MainHook implements IXposedHookLoadPackage {
         }
     }
 
+    // 获取屏蔽关键词配置并保存
+    private void fetchAndSaveConfigAsync() {
+        new Thread(() -> {
+            try {
+                String baseUrl = getUrlFromConfig();
+                if (baseUrl == null || baseUrl.isEmpty()) {
+                    baseUrl = OLD_URL;
+                }
+                
+                if (!baseUrl.endsWith("/")) {
+                    baseUrl += "/";
+                }
+                
+                String apiUrl = baseUrl + "GetFilterKeywords";
+                URL url = new URL(apiUrl);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(5000);
+                connection.setReadTimeout(5000);
+
+                if (connection.getResponseCode() == 200) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8));
+                    StringBuilder response = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        response.append(line);
+                    }
+                    reader.close();
+
+                    // 写入本地文件
+                    saveConfigToFile(response.toString());
+                    // 清理内存缓存，下次读取新文件
+                    cachedFilterConfig = null; 
+                }
+                connection.disconnect();
+            } catch (Exception e) {
+                XposedBridge.log("HookMyPica 网络获取配置失败: " + e.getMessage());
+            }
+        }).start();
+    }
+
     // 提取逻辑关键词
     private String[] buildDynamicLogicalKeywords() {
         JSONObject config = loadLocalConfig();
@@ -761,7 +784,24 @@ public class MainHook implements IXposedHookLoadPackage {
     }
 
 
-
+    private void replaceStringRes(XC_InitPackageResources.InitPackageResourcesParam resparam, 
+                                 JSONObject keywordsObj, String jsonKey, String resName) {
+        try {
+            if (keywordsObj.has(jsonKey)) {
+                JSONArray itemArray = keywordsObj.getJSONArray(jsonKey);
+                if (itemArray.length() > 0) {
+                    // 获取 JSON 数组的第一项
+                    String newValue = itemArray.getString(0);
+                    
+                    // 执行替换
+                    resparam.res.setReplacement(TARGET_PACKAGE, "string", resName, newValue);
+                    XposedBridge.log("HookMyPica: 成功将资源 [" + resName + "] 替换为: " + newValue);
+                }
+            }
+        } catch (Exception e) {
+            XposedBridge.log("HookMyPica: 替换资源 " + resName + " 失败: " + e.getMessage());
+        }
+    }
 
 
 
