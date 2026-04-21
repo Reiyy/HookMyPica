@@ -772,7 +772,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
             String[] newJsArray = new String[filterCount];
             
             for (int i = 0; i < filterCount; i++) {
-                String id = String.valueOf(i + 1); // id 从 "1" 到 "8"
+                String id = String.valueOf(i + 1); // id 从1到8
                 if (keywordsObj.has(id)) {
                     JSONArray itemArray = keywordsObj.getJSONArray(id);
                     if (itemArray.length() > 1) {
@@ -782,7 +782,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
                         newJsArray[i] = "";
                     }
                 } else {
-                    newJsArray[i] = ""; // 如果配置里没写全，填入空字符串
+                    newJsArray[i] = ""; // 如果配置不全，填入空字符串
                 }
             }
             return newJsArray;
