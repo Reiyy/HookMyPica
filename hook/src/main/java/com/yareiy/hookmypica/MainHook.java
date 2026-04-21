@@ -385,9 +385,8 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
 
     @Override
     public void handleInitPackageResources(XC_InitPackageResources.InitPackageResourcesParam resparam) throws Throwable {
-        if (!resparam.packageName.equals("com.yareiy.mypica")) return;
-
         JSONObject config = loadLocalConfig();
+        XposedBridge.log("[HookMyPica] 开始替换资源文本");
         if (config == null || !config.has("FilterKeywords")) return;
 
         try {
