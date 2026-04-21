@@ -795,7 +795,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
                 
                 try {
                     // 优先使用名称替换
-                    resparam.res.setReplacement("com.picacomic.fregata", "string", resName, newValue);
+                    resparam.res.setReplacement("com.yareiy.mypica", "string", resName, newValue);
                 } catch (Throwable t) {
                     // 如果名称找不到，ID
                     resparam.res.setReplacement(resId, newValue);
