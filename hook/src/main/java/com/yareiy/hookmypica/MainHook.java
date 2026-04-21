@@ -385,7 +385,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
 
     @Override
     public void handleInitPackageResources(XC_InitPackageResources.InitPackageResourcesParam resparam) throws Throwable {
-        if (!resparam.packageName.equals("com.picacomic.fregata")) return;
+        if (!resparam.packageName.equals("com.yareiy.mypica")) return;
 
         JSONObject config = loadLocalConfig();
         if (config == null || !config.has("FilterKeywords")) return;
@@ -803,10 +803,6 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
             XposedBridge.log("HookMyPica: 替换资源 " + resName + " 失败: " + e.getMessage());
         }
     }
-
-
-
-
 
 
 }
