@@ -394,6 +394,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
             JSONObject filterKeywords = config.getJSONObject("FilterKeywords");
             // 资源名替换
             replaceStringRes(resparam, filterKeywords, "1", "comic_list_filter_forbidden");
+            
             replaceStringRes(resparam, filterKeywords, "2", "comic_list_filter_non_chinese");
             replaceStringRes(resparam, filterKeywords, "3", "comic_list_filter_button_bl");
         } catch (Exception e) {
@@ -794,7 +795,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
                     String newValue = itemArray.getString(0);
                     
                     // 执行替换
-                    resparam.res.setReplacement(TARGET_PACKAGE, "string", resName, newValue);
+                    resparam.res.setReplacement("com.picacomic.fregata", "string", resName, newValue);
                     XposedBridge.log("HookMyPica: 成功将资源 [" + resName + "] 替换为: " + newValue);
                 }
             }
