@@ -56,6 +56,9 @@ public class MainHook implements IXposedHookLoadPackage {
 
     private static final String OLD_URL = "https://picaapi.picabridgeapiexample.com:2333/";
     private static final String CONFIG_PATH = "Android/data/com.yareiy.mypica/ApiConfig.txt";
+    private static final String CONFIG_FILE_PATH = "/sdcard/Android/data/com.yareiy.mypica/FilterKeywords.json";
+
+    private static JSONObject cachedFilterConfig = null;
 
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
@@ -78,6 +81,14 @@ public class MainHook implements IXposedHookLoadPackage {
         // XposedBridge.log("Cache dir: " + cacheDir);
         // XposedBridge.log("Image path: " + imagePath);
         // XposedBridge.log("Blur image path: " + blurImagePath);
+
+
+        XposedHelpers.findAndHookMethod(Application.class, "onCreate", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                        fetchAndSaveConfigAsync();
+                    }
+                });
 
         // Hook登录页，添加logo点击事件
         XposedHelpers.findAndHookMethod(
@@ -300,9 +311,67 @@ public class MainHook implements IXposedHookLoadPackage {
             }
         );
 
+        // 修改屏蔽按钮文本
+        XposedHelpers.findAndHookMethod("com.picacomic.fregata.fragments.ComicListFragment", lpparam.classLoader, "bH", new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                        Object fragmentInstance = param.thisObject;
+                        Button[] buttonsFilters = (Button[]) XposedHelpers.getObjectField(fragmentInstance, "buttons_filters");
+                        
+                        if (buttonsFilters == null) return;
+
+                        JSONObject config = loadLocalConfig();
+                        if (config != null && config.has("FilterKeywords")) {
+                            JSONObject keywordsObj = config.getJSONObject("FilterKeywords");
+                            
+                            // 遍历8个按钮，修改UI文本
+                            for (int i = 0; i < buttonsFilters.length; i++) {
+                                String id = String.valueOf(i + 1);
+                                if (keywordsObj.has(id)) {
+                                    JSONArray itemArray = keywordsObj.getJSONArray(id);
+                                    if (itemArray.length() > 0) {
+                                        String uiName = itemArray.getString(0); //第一个参数是UI名称
+                                        buttonsFilters[i].setText(uiName);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+
+
+        try {
+            XposedHelpers.findAndHookConstructor(
+                    "com.picacomic.fregata.adapters.ComicListRecyclerViewAdapter", 
+                    lpparam.classLoader,
+                    android.content.Context.class, 
+                    java.util.ArrayList.class, 
+                    "com.picacomic.fregata.a.b",
+                    new XC_MethodHook() {
+                        @Override
+                        protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                            Object adapterInstance = param.thisObject;
+                            
+                            // 获取动态构造的屏蔽逻辑关键词数组
+                            String[] dynamicKeywords = buildDynamicLogicalKeywords();
+                            
+                            if (dynamicKeywords != null) {
+                                XposedHelpers.setObjectField(adapterInstance, "js", dynamicKeywords);
+                                XposedBridge.log("HookMyPica: 成功替换屏蔽关键词数组！");
+                            }
+                        }
+                    });
+        } catch (Throwable t) {
+            XposedBridge.log("HookMyPica: Hook Adapter 构造函数失败: " + t.getMessage());
+        }
+
+
         // 在hook加载后调用API，获取最新的启动图
         XposedBridge.log("Calling fetchAndUpdateImages to download images.");
         fetchAndUpdateImages();
+        // 获取屏蔽关键词配置
+        fetchAndSaveConfigAsync();
+
     }
 
     // 通过API获取最新的启动图URL，并缓存到本地
@@ -565,6 +634,133 @@ public class MainHook implements IXposedHookLoadPackage {
             }
         });
     }
+
+    // 获取屏蔽关键词配置并保存
+    private void fetchAndSaveConfigAsync() {
+        new Thread(() -> {
+            try {
+                String baseUrl = getUrlFromConfig();
+                if (baseUrl == null || baseUrl.isEmpty()) {
+                    baseUrl = OLD_URL;
+                }
+                
+                if (!baseUrl.endsWith("/")) {
+                    baseUrl += "/";
+                }
+                
+                String apiUrl = baseUrl + "GetFilterKeywords";
+                URL url = new URL(apiUrl);
+                HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("GET");
+                connection.setConnectTimeout(5000);
+                connection.setReadTimeout(5000);
+
+                if (connection.getResponseCode() == 200) {
+                    BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8));
+                    StringBuilder response = new StringBuilder();
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        response.append(line);
+                    }
+                    reader.close();
+
+                    // 写入本地文件
+                    saveConfigToFile(response.toString());
+                    // 清理内存缓存，下次读取新文件
+                    cachedFilterConfig = null; 
+                }
+                connection.disconnect();
+            } catch (Exception e) {
+                XposedBridge.log("HookMyPica 网络获取配置失败: " + e.getMessage());
+            }
+        }).start();
+    }
+
+    // 保存配置到文件
+    private void saveConfigToFile(String jsonString) {
+        try {
+            File file = new File(CONFIG_FILE_PATH);
+            File dir = file.getParentFile();
+            if (dir != null && !dir.exists()) {
+                dir.mkdirs();
+            }
+            FileOutputStream fos = new FileOutputStream(file);
+            fos.write(jsonString.getBytes(StandardCharsets.UTF_8));
+            fos.close();
+        } catch (Exception e) {
+            XposedBridge.log("HookMyPica 保存配置文件失败: " + e.getMessage());
+        }
+    }
+
+    // 加载配置
+    private JSONObject loadLocalConfig() {
+        if (cachedFilterConfig != null) {
+            return cachedFilterConfig;
+        }
+
+        File file = new File(CONFIG_FILE_PATH);
+        if (!file.exists()) {
+            return null; // 文件不存在，跳过修改使用原始配置
+        }
+
+        try {
+            FileInputStream fis = new FileInputStream(file);
+            BufferedReader reader = new BufferedReader(new InputStreamReader(fis, StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                sb.append(line);
+            }
+            reader.close();
+            
+            cachedFilterConfig = new JSONObject(sb.toString());
+            return cachedFilterConfig;
+        } catch (Exception e) {
+            XposedBridge.log("HookMyPica 读取配置文件解析失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // 提取逻辑关键词
+    private String[] buildDynamicLogicalKeywords() {
+        JSONObject config = loadLocalConfig();
+        if (config == null || !config.has("FilterKeywords")) {
+            return null; // 没有配置
+        }
+
+        try {
+            JSONObject keywordsObj = config.getJSONObject("FilterKeywords");
+            
+            int filterCount = 8; 
+            String[] newJsArray = new String[filterCount];
+            
+            for (int i = 0; i < filterCount; i++) {
+                String id = String.valueOf(i + 1); // id 从 "1" 到 "8"
+                if (keywordsObj.has(id)) {
+                    JSONArray itemArray = keywordsObj.getJSONArray(id);
+                    if (itemArray.length() > 1) {
+                        // 第2个参数 是实际逻辑关键词
+                        newJsArray[i] = itemArray.getString(1); 
+                    } else {
+                        newJsArray[i] = "";
+                    }
+                } else {
+                    newJsArray[i] = ""; // 如果配置里没写全，填入空字符串
+                }
+            }
+            return newJsArray;
+        } catch (Exception e) {
+            XposedBridge.log("HookMyPica: 解析逻辑关键词数组出错: " + e.getMessage());
+            return null;
+        }
+    }
+
+
+
+
+
+
+
 
 
 }
