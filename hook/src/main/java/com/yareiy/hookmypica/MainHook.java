@@ -394,19 +394,7 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
     public void handleInitPackageResources(XC_InitPackageResources.InitPackageResourcesParam resparam) throws Throwable {
         if (!resparam.packageName.equals("com.yareiy.mypica")) return;
 
-            try {
-                // #da547c 转换为十六进制 0xFFDA547C
-                resparam.res.setReplacement("com.yareiy.mypica", "color", "pinkDark", 0xFFDA547C);
-                XResources.setSystemWideReplacement("com.yareiy.mypica", "color", "pinkDark", 0xFFDA547C);
-                
-                //XposedBridge.log("HookMyPica: 颜色资源 pinkDark 已修改为 #da547c");
-            } catch (Throwable t) {
-                XposedBridge.log("HookMyPica: 修改颜色资源失败: " + t.getMessage());
-            }
-
-
-
-            JSONObject config = loadLocalConfig();
+        JSONObject config = loadLocalConfig();
             if (config == null || !config.has("FilterKeywords")) return;
 
             try {
