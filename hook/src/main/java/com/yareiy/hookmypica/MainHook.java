@@ -385,21 +385,24 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
 
     @Override
     public void handleInitPackageResources(XC_InitPackageResources.InitPackageResourcesParam resparam) throws Throwable {
-        JSONObject config = loadLocalConfig();
-        XposedBridge.log("[HookMyPica] 开始替换资源文本");
-        if (config == null || !config.has("FilterKeywords")) return;
+        if (!resparam.packageName.equals("com.yareiy.mypica")) return;
+        XposedBridge.log("HookMyPica: 开始替换资源文本...");
 
-        try {
-            JSONObject filterKeywords = config.getJSONObject("FilterKeywords");
-            // 资源名替换
-            replaceStringRes(resparam, filterKeywords, "1", "comic_list_filter_forbidden");
-            
-            replaceStringRes(resparam, filterKeywords, "2", "comic_list_filter_non_chinese");
-            replaceStringRes(resparam, filterKeywords, "3", "comic_list_filter_button_bl");
-        } catch (Exception e) {
-            XposedBridge.log("HookMyPica: 资源替换出错: " + e.getMessage());
+        JSONObject config = loadLocalConfig();
+            if (config == null || !config.has("FilterKeywords")) return;
+
+            try {
+                JSONObject filterKeywords = config.getJSONObject("FilterKeywords");
+                
+                // 使用更安全的双重保险替换方法
+                safeReplaceResource(resparam, filterKeywords, "1", "comic_list_filter_forbidden", 0x7f0f00ff);
+                safeReplaceResource(resparam, filterKeywords, "2", "comic_list_filter_non_chinese", 0x7f0f0100);
+                safeReplaceResource(resparam, filterKeywords, "3", "comic_list_filter_button_bl", 0x7f0f00ef);
+
+            } catch (Exception e) {
+                XposedBridge.log("HookMyPica: 资源处理逻辑异常: " + e.getMessage());
+            }
         }
-    }
 
     // 通过API获取最新的启动图URL，并缓存到本地
     private void fetchAndUpdateImages() {
@@ -784,22 +787,23 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
     }
 
 
-    private void replaceStringRes(XC_InitPackageResources.InitPackageResourcesParam resparam, 
-                                 JSONObject keywordsObj, String jsonKey, String resName) {
+    private void safeReplaceResource(XC_InitPackageResources.InitPackageResourcesParam resparam, 
+                                    JSONObject keywordsObj, String jsonKey, String resName, int resId) {
         try {
             if (keywordsObj.has(jsonKey)) {
-                JSONArray itemArray = keywordsObj.getJSONArray(jsonKey);
-                if (itemArray.length() > 0) {
-                    // 获取 JSON 数组的第一项
-                    String newValue = itemArray.getString(0);
-                    
-                    // 执行替换
+                String newValue = keywordsObj.getJSONArray(jsonKey).getString(0);
+                
+                try {
+                    // 优先使用名称替换
                     resparam.res.setReplacement("com.picacomic.fregata", "string", resName, newValue);
-                    XposedBridge.log("HookMyPica: 成功将资源 [" + resName + "] 替换为: " + newValue);
+                } catch (Throwable t) {
+                    // 如果名称找不到，ID
+                    resparam.res.setReplacement(resId, newValue);
+                    XposedBridge.log("HookMyPica: 名称查找失败，已通过 ID " + Integer.toHexString(resId) + " 强制替换");
                 }
             }
         } catch (Exception e) {
-            XposedBridge.log("HookMyPica: 替换资源 " + resName + " 失败: " + e.getMessage());
+            XposedBridge.log("HookMyPica: 彻底替换资源 " + resName + " 失败: " + e.getMessage());
         }
     }
 
