@@ -20,6 +20,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.app.Application;
 import android.content.res.XResources;
+import android.widget.BaseAdapter;
 
 import java.io.File;
 import java.io.FileOutputStream;
