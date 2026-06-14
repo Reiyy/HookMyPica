@@ -287,6 +287,37 @@ public class MainHook implements IXposedHookLoadPackage, IXposedHookInitPackageR
                 }
             }
         });
+        XposedHelpers.findAndHookMethod(
+            "com.picacomic.fregata.adapters.a",
+            lpparam.classLoader,
+            "getView",
+            int.class,
+            View.class,
+            ViewGroup.class,
+            new XC_MethodHook() {
+                @Override
+                protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                    BaseAdapter adapter = (BaseAdapter) param.thisObject;
+                    int position = (Integer) param.args[0];
+                    int viewType = adapter.getItemViewType(position);
+                    if (viewType == 2) {
+                        ViewGroup parent = (ViewGroup) param.args[2];
+                        Context ctx = parent.getContext();
+                        View convertView = (View) param.args[1];
+                        View emptyView;
+                        // View复用
+                        if (convertView != null && "PICA_AD_KILLER".equals(convertView.getTag())) {
+                            emptyView = convertView; 
+                        } else {
+                            emptyView = new View(ctx);
+                            emptyView.setTag("PICA_AD_KILLER");
+                            // 保留一点，避免影响分页和章节切换
+                            emptyView.setLayoutParams(new android.widget.AbsListView.LayoutParams(1, 1));
+                        }
+                        param.setResult(emptyView);
+                    }
+                }
+            });
         // 跳过分流选择页面并自动选择分流1
         XposedHelpers.findAndHookMethod(
                 "com.picacomic.fregata.activities.SplashActivity",
